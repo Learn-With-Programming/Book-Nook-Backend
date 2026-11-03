@@ -117,3 +117,59 @@ app.delete("/books/:id", verifyJWT, async (req, res) => {
 
   res.send(result);
 });
+
+// ---------- borrows ----------
+
+app.post("/borrows", verifyJWT, async (req, res) => {
+  const bookId = req.body.bookId;
+  if (!ObjectId.isValid(bookId)) {
+    return res.status(400).send({ message: "invalid book id" });
+  }
+
+  const book = await booksCollection.findOne({ _id: new ObjectId(bookId) });
+  if (!book) {
+    return res.status(404).send({ message: "book not found" });
+  }
+
+  if (book.copies <= 0) {
+    return res
+      .status(409)
+      .send({ message: "this book is not available right now" });
+  }
+
+  const alreadyBorrowed = await borrowsCollection.findOne({
+    bookId: bookId,
+    userEmail: req.user.email,
+  });
+  if (alreadyBorrowed) {
+    return res.status(409).send({
+      message: "you already borrowed this book, please return it first",
+    });
+  }
+
+  const borrowDate = new Date();
+  let returnDate = new Date(borrowDate);
+  returnDate.setDate(returnDate.getDate() + 7);
+  if (req.body.returnDate) {
+    returnDate = new Date(req.body.returnDate);
+  }
+
+  const borrowData = {
+    bookId: bookId,
+    bookTitle: book.title,
+    bookImage: book.image,
+    userName: req.user.name,
+    userEmail: req.user.email,
+    borrowDate: borrowDate.toISOString(),
+    returnDate: returnDate.toISOString(),
+  };
+
+  const result = await borrowsCollection.insertOne(borrowData);
+
+  await booksCollection.updateOne(
+    { _id: new ObjectId(bookId) },
+    { $inc: { copies: -1 } },
+  );
+
+  res.send(result);
+});
