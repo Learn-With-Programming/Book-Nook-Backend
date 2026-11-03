@@ -173,3 +173,36 @@ app.post("/borrows", verifyJWT, async (req, res) => {
 
   res.send(result);
 });
+
+app.get("/borrows", verifyJWT, async (req, res) => {
+  const borrowsList = await borrowsCollection
+    .find({ userEmail: req.user.email })
+    .sort({ borrowDate: -1 })
+    .toArray();
+  res.send(borrowsList);
+});
+
+app.delete("/borrows/:id", verifyJWT, async (req, res) => {
+  const id = req.params.id;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "invalid borrow id" });
+  }
+
+  const borrow = await borrowsCollection.findOne({ _id: new ObjectId(id) });
+  if (!borrow) {
+    return res.status(404).send({ message: "borrow not found" });
+  }
+
+  if (borrow.userEmail !== req.user.email) {
+    return res.status(403).send({ message: "forbidden access" });
+  }
+
+  const result = await borrowsCollection.deleteOne({ _id: new ObjectId(id) });
+
+  await booksCollection.updateOne(
+    { _id: new ObjectId(borrow.bookId) },
+    { $inc: { copies: 1 } },
+  );
+
+  res.send(result);
+});
