@@ -35,3 +35,33 @@ const verifyJWT = (req, res, next) => {
     return res.status(401).send({ message: "invalid or expired token" });
   }
 };
+
+// ---------- books ----------
+
+app.get("/books", async (req, res) => {
+  const query = {};
+  if (req.query.email) {
+    query.userEmail = req.query.email;
+  }
+
+  let cursor = booksCollection.find(query).sort({ addedDate: -1 });
+  if (req.query.limit) {
+    cursor = cursor.limit(parseInt(req.query.limit));
+  }
+
+  res.send(await cursor.toArray());
+});
+
+app.get("/books/:id", async (req, res) => {
+  const id = req.params.id;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "invalid book id" });
+  }
+
+  const book = await booksCollection.findOne({ _id: new ObjectId(id) });
+  if (!book) {
+    return res.status(404).send({ message: "book not found" });
+  }
+
+  res.send(book);
+});
