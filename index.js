@@ -65,3 +65,55 @@ app.get("/books/:id", async (req, res) => {
 
   res.send(book);
 });
+
+app.post("/books", verifyJWT, async (req, res) => {
+  const book = req.body;
+  book.addedDate = new Date();
+  book.userName = req.user.name;
+  book.userEmail = req.user.email;
+
+  const result = await booksCollection.insertOne(book);
+  res.send(result);
+});
+
+app.patch("/books/:id", verifyJWT, async (req, res) => {
+  const id = req.params.id;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "invalid book id" });
+  }
+
+  const updatedBook = {
+    $set: {
+      title: req.body.title,
+      author: req.body.author,
+      category: req.body.category,
+      image: req.body.image,
+      description: req.body.description,
+      copies: parseInt(req.body.copies),
+    },
+  };
+
+  const result = await booksCollection.updateOne(
+    { _id: new ObjectId(id) },
+    updatedBook,
+  );
+  if (result.matchedCount == 0) {
+    return res.status(404).send({ message: "book not found" });
+  }
+
+  res.send(result);
+});
+
+app.delete("/books/:id", verifyJWT, async (req, res) => {
+  const id = req.params.id;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "invalid book id" });
+  }
+
+  const result = await booksCollection.deleteOne({ _id: new ObjectId(id) });
+  if (result.deletedCount == 0) {
+    return res.status(404).send({ message: "book not found" });
+  }
+
+  res.send(result);
+});
