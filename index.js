@@ -206,3 +206,21 @@ app.delete("/borrows/:id", verifyJWT, async (req, res) => {
 
   res.send(result);
 });
+
+app.use((req, res) => {
+  res.status(404).send({ message: "route not found" });
+});
+
+const connectToMongoDB = async () => {
+  try {
+    await client.connect();
+    console.log("You successfully connected to MongoDB!");
+    app.listen(port, () => {
+      console.log(`BookNook server is running on port ${port}`);
+    });
+  } catch (err) {
+    console.log("mongo connection failed:", err.message);
+  }
+};
+
+connectToMongoDB();
