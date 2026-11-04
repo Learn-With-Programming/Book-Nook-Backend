@@ -7,10 +7,26 @@ import "dotenv/config";
 const app = express();
 const port = process.env.PORT || 5000;
 
-const client = new MongoClient(process.env.MONGODB_URI);
+let cachedClient = global.mongoClient;
+let cachedDb = global.mongoDb;
 
-const booksCollection = client.db("Book-Nook").collection("books");
-const borrowsCollection = client.db("Book-Nook").collection("borrows");
+async function connectToMongoDB() {
+  if (cachedClient && cachedDb) {
+    return { client: cachedClient, db: cachedDb };
+  }
+
+  const client = new MongoClient(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000,
+  });
+  await client.connect();
+  const db = client.db("Book-Nook");
+
+  global.mongoClient = client;
+  global.mongoDb = db;
+
+  console.log("You successfully connected to MongoDB!");
+  return { client, db };
+}
 
 app.use(cors());
 app.use(express.json());
@@ -39,6 +55,9 @@ const verifyJWT = (req, res, next) => {
 // ---------- books ----------
 
 app.get("/books", async (req, res) => {
+  const { db } = await connectToMongoDB(); // ২. প্রতিটি রুটে ডাটাবেস কল করা
+  const booksCollection = db.collection("books");
+
   const query = {};
   if (req.query.email) {
     query.userEmail = req.query.email;
@@ -53,6 +72,9 @@ app.get("/books", async (req, res) => {
 });
 
 app.get("/books/:id", async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const booksCollection = db.collection("books");
+
   const id = req.params.id;
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "invalid book id" });
@@ -67,6 +89,9 @@ app.get("/books/:id", async (req, res) => {
 });
 
 app.post("/books", verifyJWT, async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const booksCollection = db.collection("books");
+
   const book = req.body;
   book.addedDate = new Date();
   book.userName = req.user.name;
@@ -77,6 +102,9 @@ app.post("/books", verifyJWT, async (req, res) => {
 });
 
 app.patch("/books/:id", verifyJWT, async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const booksCollection = db.collection("books");
+
   const id = req.params.id;
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "invalid book id" });
@@ -105,6 +133,9 @@ app.patch("/books/:id", verifyJWT, async (req, res) => {
 });
 
 app.delete("/books/:id", verifyJWT, async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const booksCollection = db.collection("books");
+
   const id = req.params.id;
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "invalid book id" });
@@ -121,6 +152,10 @@ app.delete("/books/:id", verifyJWT, async (req, res) => {
 // ---------- borrows ----------
 
 app.post("/borrows", verifyJWT, async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const booksCollection = db.collection("books");
+  const borrowsCollection = db.collection("borrows");
+
   const bookId = req.body.bookId;
   if (!ObjectId.isValid(bookId)) {
     return res.status(400).send({ message: "invalid book id" });
@@ -175,6 +210,9 @@ app.post("/borrows", verifyJWT, async (req, res) => {
 });
 
 app.get("/borrows", verifyJWT, async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const borrowsCollection = db.collection("borrows");
+
   const borrowsList = await borrowsCollection
     .find({ userEmail: req.user.email })
     .sort({ borrowDate: -1 })
@@ -183,6 +221,10 @@ app.get("/borrows", verifyJWT, async (req, res) => {
 });
 
 app.delete("/borrows/:id", verifyJWT, async (req, res) => {
+  const { db } = await connectToMongoDB();
+  const booksCollection = db.collection("books");
+  const borrowsCollection = db.collection("borrows");
+
   const id = req.params.id;
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "invalid borrow id" });
@@ -211,16 +253,12 @@ app.use((req, res) => {
   res.status(404).send({ message: "route not found" });
 });
 
-const connectToMongoDB = async () => {
-  try {
-    await client.connect();
-    console.log("You successfully connected to MongoDB!");
+if (process.env.NODE_ENV !== "production") {
+  connectToMongoDB().then(() => {
     app.listen(port, () => {
       console.log(`BookNook server is running on port ${port}`);
     });
-  } catch (err) {
-    console.log("mongo connection failed:", err.message);
-  }
-};
+  });
+}
 
-connectToMongoDB();
+export default app;
